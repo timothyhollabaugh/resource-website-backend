@@ -12,8 +12,8 @@ use super::schema::users;
 use crate::errors::Error;
 use crate::errors::ErrorKind;
 
-use crate::Request;
 use crate::HttpMethod;
+use crate::Request;
 
 use crate::search::NullableSearch;
 use crate::search::Search;
@@ -135,7 +135,7 @@ impl Request for UserRequest {
         'a,
         P: Iterator<Item = &'a str>,
         Q: Iterator<Item = (&'a str, &'a str)>,
-        B: std::io::Read
+        B: std::io::Read,
     >(
         method: HttpMethod,
         mut path: P,
@@ -151,10 +151,22 @@ impl Request for UserRequest {
 
                 for (field, query) in query {
                     match field.as_ref() {
-                        "first_name" => first_name_search = Search::from_query(query.as_ref())?,
-                        "last_name" => last_name_search = Search::from_query(query.as_ref())?,
-                        "banner_id" => banner_id_search = Search::from_query(query.as_ref())?,
-                        "email" => email_search = NullableSearch::from_query(query.as_ref())?,
+                        "first_name" => {
+                            first_name_search =
+                                Search::from_query(query.as_ref())?
+                        }
+                        "last_name" => {
+                            last_name_search =
+                                Search::from_query(query.as_ref())?
+                        }
+                        "banner_id" => {
+                            banner_id_search =
+                                Search::from_query(query.as_ref())?
+                        }
+                        "email" => {
+                            email_search =
+                                NullableSearch::from_query(query.as_ref())?
+                        }
                         _ => return Err(Error::new(ErrorKind::Url)),
                     }
                 }
@@ -167,9 +179,7 @@ impl Request for UserRequest {
                 }))
             }
 
-            (HttpMethod::GET, Some(Ok(id))) => {
-                Ok(UserRequest::GetUser(id))
-            }
+            (HttpMethod::GET, Some(Ok(id))) => Ok(UserRequest::GetUser(id)),
 
             (HttpMethod::POST, None) => {
                 let new_user: NewUser = serde_json::from_reader(body)?;
@@ -183,11 +193,9 @@ impl Request for UserRequest {
 
             (HttpMethod::DELETE, Some(Ok(id))) => {
                 Ok(UserRequest::DeleteUser(id))
-            },
-
-            _ => {
-                Err(Error::new(ErrorKind::Url))
             }
+
+            _ => Err(Error::new(ErrorKind::Url)),
         }
     }
 }

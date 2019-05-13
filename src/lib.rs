@@ -5,10 +5,10 @@ extern crate diesel;
 extern crate diesel_migrations;
 
 pub mod access;
+pub mod chemicals;
 pub mod errors;
 pub mod search;
 pub mod users;
-pub mod chemicals;
 
 use serde::Serialize;
 
@@ -25,7 +25,7 @@ pub trait Request: Sized {
         'a,
         P: Iterator<Item = &'a str>,
         Q: Iterator<Item = (&'a str, &'a str)>,
-        B: std::io::Read
+        B: std::io::Read,
     >(
         method: HttpMethod,
         path: P,
@@ -37,4 +37,3 @@ pub trait Request: Sized {
 pub trait Response {
     fn to_parts<S: Serialize>(self) -> Result<S, Error>;
 }
-
