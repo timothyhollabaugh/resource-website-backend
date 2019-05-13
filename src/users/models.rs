@@ -1,6 +1,5 @@
 use diesel::Queryable;
 use rouille::router;
-use rouille::Request;
 use serde::Deserialize;
 use serde::Serialize;
 use url::form_urlencoded;
@@ -12,6 +11,9 @@ use super::schema::users;
 
 use crate::errors::Error;
 use crate::errors::ErrorKind;
+
+use crate::Request;
+use crate::HttpMethod;
 
 use crate::search::NullableSearch;
 use crate::search::Search;
@@ -125,6 +127,68 @@ impl UserRequest {
                 Err(Error::new(ErrorKind::NotFound))
             }
         )
+    }
+}
+
+impl Request for UserRequest {
+    fn from_parts<
+        'a,
+        P: Iterator<Item = &'a str>,
+        Q: Iterator<Item = (&'a str, &'a str)>,
+        B: std::io::Read
+    >(
+        method: HttpMethod,
+        mut path: P,
+        query: Q,
+        body: B,
+    ) -> Result<Self, Error> {
+        match (method, path.next().map(|p| p.parse())) {
+            (HttpMethod::GET, None) => {
+                let mut first_name_search = Search::NoSearch;
+                let mut last_name_search = Search::NoSearch;
+                let mut banner_id_search = Search::NoSearch;
+                let mut email_search = NullableSearch::NoSearch;
+
+                for (field, query) in query {
+                    match field.as_ref() {
+                        "first_name" => first_name_search = Search::from_query(query.as_ref())?,
+                        "last_name" => last_name_search = Search::from_query(query.as_ref())?,
+                        "banner_id" => banner_id_search = Search::from_query(query.as_ref())?,
+                        "email" => email_search = NullableSearch::from_query(query.as_ref())?,
+                        _ => return Err(Error::new(ErrorKind::Url)),
+                    }
+                }
+
+                Ok(UserRequest::SearchUsers(SearchUser {
+                    first_name: first_name_search,
+                    last_name: last_name_search,
+                    banner_id: banner_id_search,
+                    email: email_search,
+                }))
+            }
+
+            (HttpMethod::GET, Some(Ok(id))) => {
+                Ok(UserRequest::GetUser(id))
+            }
+
+            (HttpMethod::POST, None) => {
+                let new_user: NewUser = serde_json::from_reader(body)?;
+                Ok(UserRequest::CreateUser(new_user))
+            }
+
+            (HttpMethod::POST, Some(Ok(id))) => {
+                let update_user: PartialUser = serde_json::from_reader(body)?;
+                Ok(UserRequest::UpdateUser(id, update_user))
+            }
+
+            (HttpMethod::DELETE, Some(Ok(id))) => {
+                Ok(UserRequest::DeleteUser(id))
+            },
+
+            _ => {
+                Err(Error::new(ErrorKind::Url))
+            }
+        }
     }
 }
 
