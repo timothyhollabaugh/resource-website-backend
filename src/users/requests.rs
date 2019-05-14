@@ -1,17 +1,15 @@
 use diesel;
-use diesel::mysql::Mysql;
 use diesel::mysql::MysqlConnection;
 use diesel::query_builder::AsQuery;
-use diesel::query_builder::BoxedSelectStatement;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
 use diesel::TextExpressionMethods;
 
-use log::error;
-use log::info;
 use log::trace;
 use log::warn;
+
+use crate::HttpMethod;
 
 use crate::errors::Error;
 use crate::errors::ErrorKind;
@@ -20,30 +18,79 @@ use crate::search::NullableSearch;
 use crate::search::Search;
 
 use crate::users::models::{
-    NewUser, PartialUser, SearchUser, User, UserList, UserRequest, UserResponse,
+    NewUser, PartialUser, SearchUser, User, UserList
 };
 use crate::users::schema::users as users_schema;
 
 pub fn handle_user(
-    request: UserRequest,
+    method: HttpMethod,
+    mut path: Vec<String>,
+    query: Vec<(String, String)>,
+    body: String,
     database_connection: &MysqlConnection,
-) -> Result<UserResponse, Error> {
-    match request {
-        UserRequest::SearchUsers(user) => {
-            search_users(user, database_connection)
-                .map(|u| UserResponse::ManyUsers(u))
+) -> Result<Option<String>, Error> {
+    match (method, path.pop().map(|p| p.parse())) {
+        (HttpMethod::GET, None) => {
+            let mut first_name_search = Search::NoSearch;
+            let mut last_name_search = Search::NoSearch;
+            let mut banner_id_search = Search::NoSearch;
+            let mut email_search = NullableSearch::NoSearch;
+
+            for (field, query) in query {
+                match field.as_ref() {
+                    "first_name" => {
+                        first_name_search =
+                            Search::from_query(query.as_ref())?
+                    }
+                    "last_name" => {
+                        last_name_search =
+                            Search::from_query(query.as_ref())?
+                    }
+                    "banner_id" => {
+                        banner_id_search =
+                            Search::from_query(query.as_ref())?
+                    }
+                    "email" => {
+                        email_search =
+                            NullableSearch::from_query(query.as_ref())?
+                    }
+                    _ => return Err(Error::new(ErrorKind::Url)),
+                }
+            }
+
+            let response = search_users(SearchUser {
+                first_name: first_name_search,
+                last_name: last_name_search,
+                banner_id: banner_id_search,
+                email: email_search,
+            }, database_connection)?;
+
+            Ok(Some(serde_json::to_string(&response)?))
         }
-        UserRequest::GetUser(id) => {
-            get_user(id, database_connection).map(|u| UserResponse::OneUser(u))
+
+        (HttpMethod::GET, Some(Ok(id))) => {
+            let response = get_user(id, database_connection)?;
+            Ok(Some(serde_json::to_string(&response)?))
         }
-        UserRequest::CreateUser(user) => create_user(user, database_connection)
-            .map(|u| UserResponse::OneUser(u)),
-        UserRequest::UpdateUser(id, user) => {
-            update_user(id, user, database_connection)
-                .map(|_| UserResponse::NoResponse)
+
+        (HttpMethod::POST, None) => {
+            let new_user: NewUser = serde_json::from_str(&body)?;
+            let response = create_user(new_user, database_connection)?;
+            Ok(Some(serde_json::to_string(&response)?))
         }
-        UserRequest::DeleteUser(id) => delete_user(id, database_connection)
-            .map(|_| UserResponse::NoResponse),
+
+        (HttpMethod::POST, Some(Ok(id))) => {
+            let new_user: PartialUser = serde_json::from_str(&body)?;
+            update_user(id, new_user, database_connection)?;
+            Ok(None)
+        }
+
+        (HttpMethod::DELETE, Some(Ok(id))) => {
+            delete_user(id, database_connection)?;
+            Ok(None)
+        }
+
+        _ => Err(Error::new(ErrorKind::Url)),
     }
 }
 

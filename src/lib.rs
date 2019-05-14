@@ -10,7 +10,6 @@ pub mod errors;
 pub mod search;
 pub mod users;
 
-use serde::Serialize;
 use log::info;
 use log::warn;
 
@@ -52,20 +51,3 @@ pub enum HttpMethod {
     DELETE,
 }
 
-pub trait Request: Sized {
-    fn from_parts<
-        'a,
-        P: Iterator<Item = &'a str>,
-        Q: Iterator<Item = (&'a str, &'a str)>,
-        B: std::io::Read,
-    >(
-        method: HttpMethod,
-        path: P,
-        query: Q,
-        body: B,
-    ) -> Result<Self, Error>;
-}
-
-pub trait Response {
-    fn to_parts<S: Serialize>(self) -> Result<S, Error>;
-}
