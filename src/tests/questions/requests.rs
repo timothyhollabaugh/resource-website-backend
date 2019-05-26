@@ -4,13 +4,16 @@ use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::RunQueryDsl;
 
+use crate::DbReadAll;
+use crate::DbReadSingle;
+
 use crate::errors::Error;
 use crate::errors::ErrorKind;
 
 use crate::access::requests::check_to_run;
 
 use crate::tests::questions::models::{
-    NewQuestion, Question, QuestionList, QuestionRequest, QuestionResponse,
+    NewQuestion, Question, QuestionRequest, QuestionResponse,
 };
 use crate::tests::questions::schema::questions as questions_schema;
 
@@ -22,8 +25,13 @@ pub fn handle_question(
     match request {
         QuestionRequest::GetQuestions => {
             check_to_run(requested_user, "GetQuestions", database_connection)?;
-            get_questions(database_connection)
+            Question::read_all(database_connection)
                 .map(|u| QuestionResponse::ManyQuestions(u))
+        }
+        QuestionRequest::GetQuestion(id) => {
+            check_to_run(requested_user, "GetQuestions", database_connection)?;
+            Question::read_single(id, database_connection)
+                .map(|u| QuestionResponse::OneQuestion(u))
         }
         QuestionRequest::CreateQuestion(question) => {
             check_to_run(
@@ -44,17 +52,6 @@ pub fn handle_question(
                 .map(|_| QuestionResponse::NoResponse)
         }
     }
-}
-
-fn get_questions(
-    database_connection: &MysqlConnection,
-) -> Result<QuestionList, Error> {
-    let found_questions =
-        questions_schema::table.load::<Question>(database_connection)?;
-
-    Ok(QuestionList {
-        questions: found_questions,
-    })
 }
 
 fn create_question(

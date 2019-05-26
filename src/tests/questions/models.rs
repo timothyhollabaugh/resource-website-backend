@@ -6,6 +6,11 @@ use serde_json;
 
 use log::warn;
 
+use crate::DbBase;
+use crate::DbReadAll;
+use crate::DbReadSingle;
+use crate::ItemList;
+
 use crate::errors::Error;
 use crate::errors::ErrorKind;
 
@@ -21,6 +26,26 @@ pub struct Question {
     pub incorrect_answer_2: String,
     pub incorrect_answer_3: String,
 }
+
+impl DbBase for Question {
+    type Table = questions::table;
+    type SqlType = questions::SqlType;
+    type DbModel = Self;
+
+    fn from_db(db: Self::DbModel) -> Self {
+        db
+    }
+    fn into_db(self) -> Self {
+        self
+    }
+
+    fn table() -> Self::Table {
+        questions::table
+    }
+}
+
+impl DbReadAll for Question {}
+impl DbReadSingle for Question {}
 
 #[derive(Insertable, Serialize, Deserialize)]
 #[table_name = "questions"]
@@ -66,6 +91,7 @@ pub struct ResponseQuestionList {
 
 pub enum QuestionRequest {
     GetQuestions,
+    GetQuestion(u64),
     CreateQuestion(NewQuestion),
     DeleteQuestion(u64),
 }
@@ -79,10 +105,15 @@ impl QuestionRequest {
                 Ok(QuestionRequest::GetQuestions)
             },
 
-            (POST) (/) => {
-                let request_body = request.data().ok_or(Error::new(ErrorKind::Body))?;
-                let new_question: NewQuestion = serde_json::from_reader(request_body)?;
+            (GET) (/{id: u64}) => {
+                Ok(QuestionRequest::GetQuestion(id))
+            },
 
+            (POST) (/) => {
+                let request_body = request.data()
+                    .ok_or(Error::new(ErrorKind::Body))?;
+                let new_question: NewQuestion =
+                    serde_json::from_reader(request_body)?;
                 Ok(QuestionRequest::CreateQuestion(new_question))
             },
 
@@ -100,7 +131,7 @@ impl QuestionRequest {
 
 pub enum QuestionResponse {
     OneQuestion(Question),
-    ManyQuestions(QuestionList),
+    ManyQuestions(ItemList<Question>),
     NoResponse,
 }
 

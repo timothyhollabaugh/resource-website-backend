@@ -11,10 +11,13 @@ use super::schema::users;
 use crate::errors::Error;
 use crate::errors::ErrorKind;
 
+use crate::DbBase;
+use crate::DbReadAll;
+
 use crate::search::NullableSearch;
 use crate::search::Search;
 
-#[derive(Debug, Queryable, Serialize, Deserialize)]
+#[derive(Queryable, Serialize, Deserialize, Debug)]
 pub struct User {
     pub id: u64,
     pub first_name: String,
@@ -22,6 +25,26 @@ pub struct User {
     pub banner_id: u32,
     pub email: Option<String>,
 }
+
+impl DbBase for User {
+    type Table = users::table;
+    type SqlType = users::SqlType;
+    type DbModel = Self;
+
+    fn from_db(db: Self::DbModel) -> Self {
+        db
+    }
+
+    fn into_db(self) -> Self::DbModel {
+        self
+    }
+
+    fn table() -> Self::Table {
+        users::table
+    }
+}
+
+impl DbReadAll for User {}
 
 #[derive(Insertable, Serialize, Deserialize, Debug)]
 #[table_name = "users"]

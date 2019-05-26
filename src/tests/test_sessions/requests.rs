@@ -29,7 +29,6 @@ use crate::tests::test_sessions::models::{
 use crate::tests::questions::models::AnonymousQuestion;
 use crate::tests::questions::models::AnonymousQuestionList;
 use crate::tests::questions::models::Question;
-use crate::tests::questions::models::ResponseQuestion;
 use crate::tests::questions::models::ResponseQuestionList;
 
 use crate::tests::question_categories::models::QuestionCategoryRequest;
@@ -64,8 +63,9 @@ pub fn handle_test_session(
                 test_session_id,
                 respose_questions,
                 requested_user,
-                database_connection
-            ).map(|_| TestSessionResponse::NoResponse)
+                database_connection,
+            )
+            .map(|_| TestSessionResponse::NoResponse)
         }
         TestSessionRequest::GetTestSessions(test_id) => {
             check_to_run(
@@ -165,8 +165,10 @@ fn open(
                             test_session_registrations_schema::opened_test
                                 .is_null(),
                         )
-                        .and(test_session_registrations_schema::submitted_test
-                            .is_null()),
+                        .and(
+                            test_session_registrations_schema::submitted_test
+                                .is_null(),
+                        ),
                 )
                 .load::<RawTestSessionRegistration>(database_connection)?;
 
@@ -202,14 +204,12 @@ fn open(
                 )?;
                 let question_category = match question_category_response {
                     QuestionCategoryResponse::OneQuestionCategory(qc) => qc,
-                    QuestionCategoryResponse::ManyQuestionCategories(mut qcs) => {
-                        match qcs.question_categories.pop() {
-                            Some(qc) => qc,
-                            None => {
-                                return Err(Error::new(ErrorKind::Database))
-                            }
-                        }
-                    }
+                    QuestionCategoryResponse::ManyQuestionCategories(
+                        mut qcs,
+                    ) => match qcs.question_categories.pop() {
+                        Some(qc) => qc,
+                        None => return Err(Error::new(ErrorKind::Database)),
+                    },
                     QuestionCategoryResponse::NoResponse => {
                         return Err(Error::new(ErrorKind::Database))
                     }
@@ -221,28 +221,32 @@ fn open(
                     )
                     .load::<Question>(database_connection)?;
 
-                let mut chosen_questions: Vec<_> = questions.choose_multiple(
-                    &mut rand::thread_rng(),
-                    test_question_category.number_of_questions as usize,
-                ).into_iter().map(|q| {
-                    let mut answers = [
-                        q.correct_answer.clone(),
-                        q.incorrect_answer_1.clone(),
-                        q.incorrect_answer_2.clone(),
-                        q.incorrect_answer_3.clone(),
-                    ];
+                let mut chosen_questions: Vec<_> = questions
+                    .choose_multiple(
+                        &mut rand::thread_rng(),
+                        test_question_category.number_of_questions as usize,
+                    )
+                    .into_iter()
+                    .map(|q| {
+                        let mut answers = [
+                            q.correct_answer.clone(),
+                            q.incorrect_answer_1.clone(),
+                            q.incorrect_answer_2.clone(),
+                            q.incorrect_answer_3.clone(),
+                        ];
 
-                    answers.shuffle(&mut rand::thread_rng());
+                        answers.shuffle(&mut rand::thread_rng());
 
-                    AnonymousQuestion {
-                        id: q.id,
-                        title: q.title.clone(),
-                        answer_1: answers[0].clone(),
-                        answer_2: answers[1].clone(),
-                        answer_3: answers[2].clone(),
-                        answer_4: answers[3].clone(),
-                    }
-                }).collect();
+                        AnonymousQuestion {
+                            id: q.id,
+                            title: q.title.clone(),
+                            answer_1: answers[0].clone(),
+                            answer_2: answers[1].clone(),
+                            answer_3: answers[2].clone(),
+                            answer_4: answers[3].clone(),
+                        }
+                    })
+                    .collect();
 
                 all_questions.append(&mut chosen_questions);
             }
@@ -268,7 +272,9 @@ fn open(
                 .set(&partial_raw_test_session_registration)
                 .execute(database_connection)?;
 
-            Ok(AnonymousQuestionList { questions: all_questions })
+            Ok(AnonymousQuestionList {
+                questions: all_questions,
+            })
         } else {
             Err(Error::new(ErrorKind::OpenedTestTwice))
         }
@@ -293,29 +299,14 @@ fn submit(
                             test_session_registrations_schema::opened_test
                                 .is_not_null(),
                         )
-                        .and(test_session_registrations_schema::submitted_test
-                            .is_null()),
+                        .and(
+                            test_session_registrations_schema::submitted_test
+                                .is_null(),
+                        ),
                 )
                 .load::<RawTestSessionRegistration>(database_connection)?;
 
         if existing_open_registrations.len() == 1 {
-            let test_session =
-                get_test_session(test_session_id, database_connection)?;
-
-            let test_request = TestRequest::GetTest(test_session.test_id);
-            let test_response =
-                handle_test(test_request, Some(0), database_connection)?;
-            let test = match test_response {
-                TestResponse::OneTest(test) => test,
-                TestResponse::ManyTests(mut tests) => match tests.tests.pop() {
-                    Some(test) => test,
-                    None => return Err(Error::new(ErrorKind::Database)),
-                },
-                TestResponse::NoResponse => {
-                    return Err(Error::new(ErrorKind::Database))
-                }
-            };
-
             let n_questions = response_questions.questions.len();
 
             if n_questions == 0 {
@@ -326,9 +317,7 @@ fn submit(
 
             for response_question in response_questions.questions {
                 let mut questions = questions_schema::table
-                    .filter(
-                        questions_schema::id.eq(response_question.id),
-                    )
+                    .filter(questions_schema::id.eq(response_question.id))
                     .load::<Question>(database_connection)?;
 
                 if let Some(question) = questions.pop() {
@@ -336,7 +325,7 @@ fn submit(
                         n_correct += 1;
                     }
                 } else {
-                    return Err(Error::new(ErrorKind::Database))
+                    return Err(Error::new(ErrorKind::Database));
                 }
             }
 
@@ -387,7 +376,7 @@ fn condense_join(
             registered,
             opened_test,
             submitted_test,
-            score: score,
+            score,
         }) = join.test_session_registration
         {
             let registered =
